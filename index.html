@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>五崧捷運 — 報關系統新架構分析報告</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-light: #e8eefb;
+    --success: #059669;
+    --success-light: #ecfdf5;
+    --warning: #d97706;
+    --warning-light: #fffbeb;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    color: var(--gray-900);
+    line-height: 1.7;
+    background: var(--gray-50);
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 40px 24px; }
+  .report-header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1a56db 100%);
+    color: white;
+    padding: 60px 40px;
+    border-radius: 16px;
+    margin-bottom: 40px;
+  }
+  .report-header h1 { font-size: 28px; margin-bottom: 8px; }
+  .report-header .subtitle { font-size: 18px; opacity: 0.85; margin-bottom: 20px; }
+  .report-header .meta { font-size: 14px; opacity: 0.7; }
+  .report-header .meta span { margin-right: 24px; }
+  .section {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .section h2 {
+    font-size: 22px;
+    color: var(--primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--primary-light);
+  }
+  .section h3 { font-size: 17px; color: var(--gray-700); margin: 24px 0 12px 0; }
+  .section p { margin-bottom: 12px; color: var(--gray-700); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+  th { background: var(--gray-100); padding: 10px 14px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--gray-200); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--gray-200); }
+  tr:hover td { background: var(--gray-50); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-success { background: var(--success-light); color: var(--success); }
+  .badge-warning { background: var(--warning-light); color: var(--warning); }
+  .badge-danger { background: var(--danger-light); color: var(--danger); }
+  .badge-info { background: var(--primary-light); color: var(--primary); }
+  .highlight { padding: 20px 24px; border-radius: 8px; margin: 16px 0; }
+  .highlight-info { background: var(--primary-light); border-left: 4px solid var(--primary); }
+  .highlight-success { background: var(--success-light); border-left: 4px solid var(--success); }
+  .highlight-warning { background: var(--warning-light); border-left: 4px solid var(--warning); }
+  .highlight-danger { background: var(--danger-light); border-left: 4px solid var(--danger); }
+  .highlight strong { display: block; margin-bottom: 4px; }
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .compare-card { padding: 20px; border-radius: 8px; border: 1px solid var(--gray-200); }
+  .compare-card.old { border-color: var(--danger); background: var(--danger-light); }
+  .compare-card.new { border-color: var(--success); background: var(--success-light); }
+  .compare-card h4 { font-size: 14px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .compare-card.old h4 { color: var(--danger); }
+  .compare-card.new h4 { color: var(--success); }
+  .compare-card ul { padding-left: 20px; font-size: 14px; color: var(--gray-700); }
+  .compare-card li { margin-bottom: 4px; }
+  .flow-split {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+    align-items: center;
+    margin: 24px 0;
+  }
+  .flow-source {
+    background: var(--primary-light);
+    color: var(--primary);
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-weight: 600;
+    text-align: center;
+  }
+  .flow-arrows {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 0 8px;
+  }
+  .flow-arrow-line {
+    display: flex;
+    align-items: center;
+    color: var(--gray-400);
+    font-size: 20px;
+  }
+  .flow-targets {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .flow-target {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: center;
+  }
+  .flow-target.xml { background: #dcfce7; color: #166534; }
+  .flow-target.txt { background: #fef3c7; color: #92400e; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 16px 0; }
+  .stat-card { background: var(--gray-50); padding: 20px; border-radius: 8px; text-align: center; border: 1px solid var(--gray-200); }
+  .stat-card .number { font-size: 36px; font-weight: 700; color: var(--primary); line-height: 1; }
+  .stat-card .label { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+  .footer { text-align: center; padding: 40px; color: var(--gray-500); font-size: 13px; }
+  code { background: var(--gray-100); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  @media print {
+    body { background: white; }
+    .section { box-shadow: none; border: 1px solid var(--gray-200); }
+    .report-header { color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="report-header">
+  <h1>報關系統新架構分析報告</h1>
+  <div class="subtitle">現行系統分析與外圍系統設計規劃</div>
+  <div class="meta">
+    <span>五崧捷運股份有限公司</span>
+    <span>八拍子有限公司</span>
+    <span>2026 年 3 月</span>
+  </div>
+</div>
+
+<!-- 1. 摘要 -->
+<div class="section">
+  <h2>一、摘要</h2>
+  <p>我們完成了現行報關系統的完整逆向工程分析，包括 Delphi 原始碼解析、資料庫結構盤點、以及海關官方最新傳輸規格（XSD R-08-01）的交叉比對。本報告彙整分析結論，提供外圍系統報關模組的設計方向建議。</p>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="number">670</div><div class="label">舊系統欄位數</div></div>
+    <div class="stat-card"><div class="number">390</div><div class="label">新系統欄位數</div></div>
+    <div class="stat-card"><div class="number">-42%</div><div class="label">欄位精簡幅度</div></div>
+    <div class="stat-card"><div class="number">15</div><div class="label">消除的隱藏邏輯</div></div>
+  </div>
+  <div class="highlight highlight-info">
+    <strong>核心結論</strong>
+    新系統以海關最新官方規格（R-08-01）為設計骨幹，同時完整涵蓋五崧現有業務需求。透過架構分層設計，將報關資料、傳輸格式、計算邏輯三者分離，大幅提升系統的可維護性與擴充性。
+  </div>
+</div>
+
+<!-- 2. 現況分析 -->
+<div class="section">
+  <h2>二、現行系統分析</h2>
+
+  <h3>2.1 系統概況</h3>
+  <p>現行報關系統使用 Delphi 7 開發（2013 年起），透過關貿網路（TradeVan）傳輸報關資料至海關。系統涵蓋進口、出口、轉運三種報單類型，支援區外（XML 格式）與區內（TXT 固定寬度格式）兩種傳輸方式。</p>
+  <table>
+    <thead><tr><th>項目</th><th>現況</th></tr></thead>
+    <tbody>
+      <tr><td>開發語言</td><td>Delphi 7（2013-2025 持續維護）</td></tr>
+      <tr><td>資料庫</td><td>Oracle 10g，11 張核心報關表，670 個欄位</td></tr>
+      <tr><td>傳輸管道</td><td>關貿網路（TradeVan），用戶代碼 S0910</td></tr>
+      <tr><td>XML 版本</td><td>R-05-00（2017 年版）</td></tr>
+      <tr><td>官方最新版本</td><td><strong>R-08-01</strong>（2024 年 12 月）— 差 3 個大版本</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.2 資料使用率分析</h3>
+  <p>我們對資料庫的 670 個欄位進行使用率分析，發現只有 46% 的欄位被 EDI 傳輸實際使用：</p>
+  <table>
+    <thead><tr><th>資料表</th><th>中文</th><th class="num">總欄位</th><th class="num">實際使用</th><th class="num">使用率</th></tr></thead>
+    <tbody>
+      <tr><td>SCUSDEC</td><td>報單主檔</td><td class="num">315</td><td class="num">106</td><td class="num">33.7%</td></tr>
+      <tr><td>CUSSM</td><td>報單副檔</td><td class="num">140</td><td class="num">48</td><td class="num">34.3%</td></tr>
+      <tr><td>SCUSITEM</td><td>報單項次</td><td class="num">128</td><td class="num">90</td><td class="num">70.3%</td></tr>
+      <tr><td>其他 8 張表</td><td>稅費/貨櫃/發票/材積等</td><td class="num">87</td><td class="num">87</td><td class="num">100%</td></tr>
+      <tr style="font-weight:700"><td>合計</td><td>11 張表</td><td class="num">670</td><td class="num">308</td><td class="num">46%</td></tr>
+    </tbody>
+  </table>
+  <p>未使用的 362 個欄位中：約 150 個已停用或冗餘（例如存了代碼又存名稱）；約 60 個屬於運輸/帳務等其他模組使用；約 80 個為簽證相關欄位（將在新系統重新設計）。</p>
+
+  <h3>2.3 報單生命週期</h3>
+  <p>經過與五崧的討論，我們確認了報單從建立到結案的完整流程：</p>
+  <table>
+    <thead><tr><th>階段</th><th>說明</th><th>現況</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1. 建單</strong></td><td>OP 建立報單並填寫資料。可從同客戶的歷史報單複製</td><td>Delphi 表單</td></tr>
+      <tr><td><strong>2. 邏輯檢查</strong></td><td>系統自動比對同客戶歷史報單（例如單價突然從 10,000 降到 100），異常提醒 OP</td><td>Delphi 程式內建</td></tr>
+      <tr><td><strong>3. 客戶預審</strong></td><td>發送報單內容給客戶確認，客戶可批准或退回修改意見</td><td><span class="badge badge-info">新功能</span> 舊系統沒有</td></tr>
+      <tr><td><strong>4. EDI 傳送</strong></td><td>透過關貿網路傳送至海關</td><td>Delphi 自動產檔</td></tr>
+      <tr><td><strong>5. 海關回覆</strong></td><td>C1 免驗放行 / C2 文件審查 / C3 貨物查驗</td><td>關貿串接至放行</td></tr>
+      <tr><td><strong>6. 查驗處理</strong></td><td>C2/C3 時 OP 需準備文件（含商標圖片貼附），配合海關查驗</td><td>OP 手動處理</td></tr>
+      <tr><td><strong>7. 計費</strong></td><td>報關費、加班費（依客戶合約門檻）、列印頁數加收等</td><td>LRP 批價系統</td></tr>
+      <tr><td><strong>8. 結案</strong></td><td>海關結案狀態 MT/MS</td><td><span class="badge badge-warning">OP 上網查</span> 系統未串接</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.4 商標管理</h3>
+  <p>五崧的客戶（如聯發科、TP-Link 等）出口產品時，報單需要帶商標資訊。現行系統有一套商標資料庫：</p>
+  <ul style="padding-left:20px; margin-bottom:12px; color: var(--gray-700);">
+    <li><strong>商標主檔</strong>（104 筆）：按客戶管理商標名稱與對應圖片檔</li>
+    <li><strong>報單商標</strong>（42 萬筆）：每個報單項次對應使用的商標</li>
+    <li>C2/C3 被查驗時，OP 需從商標資料庫取出圖片貼附到報單</li>
+  </ul>
+  <p>新系統規劃將商標主檔納入客戶模組管理，並在報關流程中自動帶入，減少 OP 手動貼附的工作。</p>
+
+  <h3>2.5 發現的隱藏邏輯</h3>
+  <p>在 Delphi 原始碼中，我們發現了 <strong>15 項隱藏的資料處理邏輯</strong>，這些邏輯沒有文件記載，只存在於程式碼中：</p>
+  <table>
+    <thead><tr><th>隱藏邏輯</th><th>說明</th><th>風險</th></tr></thead>
+    <tbody>
+      <tr><td>品名組合</td><td>從 3 個來源（大品名 + 品名欄 1-13 行 + 延伸品名）拼接成一段文字</td><td><span class="badge badge-warning">中</span></td></tr>
+      <tr><td>奢侈稅自動計算</td><td>稅則 87 開頭 + 特別規定含 L* + 稅額超過 300 萬 → 自動加稅碼</td><td><span class="badge badge-danger">高</span></td></tr>
+      <tr><td>提單類型碼推導</td><td>空運/海運 + 主提單/分提單 → 4 種不同代碼（741/703/704/714）</td><td><span class="badge badge-warning">中</span></td></tr>
+      <tr><td>原報單路由</td><td>依 4 個欄位交叉判斷原報單號碼放在哪個 XML 節點</td><td><span class="badge badge-danger">高</span></td></tr>
+      <tr><td>身份代碼轉換</td><td>舊代碼 186 → 新代碼 58、187 → 53</td><td><span class="badge badge-success">低</span></td></tr>
+      <tr><td>外國客戶判斷</td><td>從統編格式（是否含英文字母）猜測客戶是否為外國人</td><td><span class="badge badge-warning">中</span></td></tr>
+      <tr><td>箱號對應關別</td><td>箱號 014/367 → 新竹關、194 → 台中關，寫死在程式碼中</td><td><span class="badge badge-warning">中</span></td></tr>
+      <tr><td colspan="3" style="color: var(--gray-500); font-style:italic;">... 另有 8 項（菸酒稅、推貿費、存放地點推導、材積單位轉換等）</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 3. 官方規格比對 -->
+<div class="section">
+  <h2>三、海關官方規格比對</h2>
+
+  <h3>3.1 版本差異</h3>
+  <p>我們從關港貿單一窗口取得了最新的官方 XSD 規格（R-08-01），並與現行系統使用的版本（R-05-00）進行比對：</p>
+  <table>
+    <thead><tr><th>報單類型</th><th>訊息代碼</th><th>現行版本</th><th>官方最新</th><th>差異</th></tr></thead>
+    <tbody>
+      <tr><td>進口報單</td><td>NX5105</td><td>R-05-00</td><td><strong>R-08-01</strong></td><td><span class="badge badge-danger">差 3 個版本</span></td></tr>
+      <tr><td>出口報單</td><td>N5203</td><td>R-00-05</td><td>R-00-05</td><td><span class="badge badge-success">一致</span></td></tr>
+      <tr><td>轉運報單</td><td>N5301</td><td>R-01-01</td><td>R-01-01</td><td><span class="badge badge-success">一致</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 R-05-00 與 R-08-01 的主要差異</h3>
+  <p>進口報單（NX5105）從 R-05-00 到 R-08-01，主要新增了以下區塊（注意：AEO 編號、簽審申請結構等在 R-05-00 已存在，非新增）：</p>
+  <table>
+    <thead><tr><th>新增區塊</th><th>用途</th><th class="num">欄位數</th><th>五崧需要嗎？</th></tr></thead>
+    <tbody>
+      <tr><td><strong>報單內嵌簽審</strong>（tw_Application 嵌入 NX5105）</td><td>簽審申請結構（tw_Application）本身在 R-05-00 已存在，R-08-01 的改變是<strong>允許直接嵌入報單 XML</strong>，取代分開傳送（詳見 3.4）</td><td class="num">51</td><td><span class="badge badge-danger">必要</span> — R-08-01 官方標準</td></tr>
+      <tr><td><strong>醫療器材</strong></td><td>醫療器材許可證號碼與授權人</td><td class="num">3</td><td><span class="badge badge-warning">建議</span> — 五崧有 65 萬筆醫材項次</td></tr>
+      <tr><td><strong>製造批號追蹤</strong></td><td>藥品等需要追蹤製造批號、製造日期、有效日期</td><td class="num">4</td><td><span class="badge badge-warning">建議</span> — 2021 年海關已要求藥品填報</td></tr>
+      <tr><td><strong>食品安全</strong></td><td>pH 值、殺菌值、成分名稱/含量</td><td class="num">4</td><td><span class="badge badge-info">預留</span></td></tr>
+      <tr><td><strong>動植物檢疫</strong></td><td>動物年齡/性別/晶片、屠宰日期、檢疫處理</td><td class="num">8</td><td><span class="badge badge-info">預留</span></td></tr>
+      <tr><td><strong>酒類管理</strong></td><td>酒齡、酒精成分、地理標示、裝瓶日期</td><td class="num">10</td><td><span class="badge badge-success">不需要</span> — 五崧沒有報過酒類</td></tr>
+      <tr><td>進出口人電話/Email</td><td>報單本體的進出口人可帶電話與 Email（AEO 編號現行系統已支援）</td><td class="num">~5</td><td><span class="badge badge-info">預留</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 五崧的品項分布（依據實際資料）</h3>
+  <table>
+    <thead><tr><th>品項類別</th><th>稅則章</th><th class="num">項次數</th><th class="num">佔比</th></tr></thead>
+    <tbody>
+      <tr><td>電子零件/機械</td><td>84-85</td><td class="num">26,163,220</td><td class="num">76%</td></tr>
+      <tr><td>攝影/光學儀器</td><td>37, 90</td><td class="num">3,872,576</td><td class="num">11%</td></tr>
+      <tr><td>塑膠/化學品</td><td>28-39</td><td class="num">2,284,707</td><td class="num">7%</td></tr>
+      <tr><td><strong>醫療器材</strong></td><td>9018-22</td><td class="num">653,704</td><td class="num">1.9%</td></tr>
+      <tr><td>車輛零件</td><td>87</td><td class="num">195,701</td><td class="num">0.6%</td></tr>
+      <tr><td>食品/農產</td><td>01-24</td><td class="num">30,539</td><td class="num">0.09%</td></tr>
+      <tr><td>藥品</td><td>30</td><td class="num">13,443</td><td class="num">0.04%</td></tr>
+      <tr><td>酒類</td><td>2204-08</td><td class="num">0</td><td class="num">0%</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.4 簽審申請的傳輸方式變化</h3>
+  <p>報關時如果貨品涉及許可管制（例如高科技出口管制、商品檢驗、食品查驗等），報關行需要同時向海關和各個簽審機關申請。目前的做法和未來的變化如下：</p>
+
+  <h4 style="font-size:15px; margin:16px 0 8px 0;">現行做法</h4>
+  <p>現行系統的簽審傳送依區內/區外有不同的處理方式：</p>
+  <div class="highlight highlight-warning">
+    <strong>發現：區外簽證功能已開發但未開放</strong>
+    經分析 Delphi 原始碼，區外報單的簽證傳送選項在 UI 上被停用（Disabled），程式碼已寫好但未開放使用。目前區外的簽審申請不透過 LRP 系統處理，需確認實際作業方式。
+  </div>
+  <table>
+    <thead><tr><th></th><th>區外</th><th>區內</th></tr></thead>
+    <tbody>
+      <tr><td>報單傳送</td><td>✅ XML 格式</td><td>✅ TXT 格式</td></tr>
+      <tr><td>簽證傳送</td><td><strong>❌ 功能停用</strong>（透過其他管道？）</td><td>✅ 跟報單打包在同一個檔案</td></tr>
+      <tr><td>進倉傳送</td><td>❌ 無此功能</td><td>✅ 跟報單打包在同一個檔案</td></tr>
+    </tbody>
+  </table>
+  <p>區內的簽審是跟報單打包在同一個 TXT 檔案傳送。不同的簽審類型對應不同的簽審機關：</p>
+  <table>
+    <thead><tr><th>簽審類型</th><th>送給誰</th><th>舉例</th></tr></thead>
+    <tbody>
+      <tr><td>輸出入許可（EP/IP）</td><td>國貿局</td><td>高科技出口管制等</td></tr>
+      <tr><td>商品檢驗</td><td>標檢局</td><td>進出口檢驗申請</td></tr>
+      <tr><td>食品查驗</td><td>食藥署</td><td>進口食品查驗</td></tr>
+      <tr><td>產地證明</td><td>簽審機關</td><td>產地證明書</td></tr>
+    </tbody>
+  </table>
+
+  <h4 style="font-size:15px; margin:16px 0 8px 0;">R-08-01 的設計方向：報單內嵌簽審申請</h4>
+  <p>R-08-01 在報單 XML（NX5105）裡面新增了 <code>tw_Application</code> 結構，允許把簽審申請的資料<strong>直接嵌在報單裡面一起傳</strong>，由關港貿單一窗口負責拆分轉發給各機關。</p>
+
+  <div class="compare-grid">
+    <div class="compare-card old">
+      <h4>現行：分開傳送</h4>
+      <ul>
+        <li>報關行產生多個 XML 檔案</li>
+        <li>報單（NX5105）和簽證（NX201/401/601）各自獨立</li>
+        <li>各檔案有各自的 XSD 格式</li>
+        <li>簽審資料散落在報單副檔的零散欄位</li>
+        <li>一次只能填寫一種簽審，需分次傳送</li>
+        <li>檢附文件最多 5 份</li>
+      </ul>
+    </div>
+    <div class="compare-card new">
+      <h4>R-08-01：內嵌傳送</h4>
+      <ul>
+        <li>報關行只產生一個 XML 檔案</li>
+        <li>簽審申請嵌在報單 XML 裡面</li>
+        <li>關港貿負責拆分轉發</li>
+        <li>簽審資料結構化（tw_Application）</li>
+        <li>一張報單可帶<strong>多種簽審</strong></li>
+        <li>檢附文件<strong>不限數量</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight highlight-info">
+    <strong>R-08-01 為關港貿發布的官方標準，內嵌模式已是正式規格</strong>
+    新系統採用 R-08-01 設計後，可直接使用內嵌模式傳送簽審申請。建議與 IT 確認：五崧目前分開傳送的方式（NX201/NX401/NX601 各自獨立）是否要在新系統中改為內嵌模式，或維持兩種模式並存以便過渡。
+  </div>
+
+  <div class="highlight highlight-info">
+    <strong>對報關 OP 的影響：無</strong>
+    不管底層用「分開傳送」還是「內嵌傳送」，OP 填的資料內容完全一樣。差別只在系統產生的檔案格式不同。新系統的簽審資料會統一存在結構化的資料表中，傳輸時再依需求產生對應的格式。
+  </div>
+
+  <div class="highlight highlight-success">
+    <strong>結論：建議新系統直接採用 R-08-01</strong>
+    現行系統使用 R-05-00 仍可正常傳輸（海關向下相容），但新系統應直接採用 R-08-01 設計。原因：(1) 五崧有醫材和藥品的報關需求，R-08-01 有對應的欄位支援；(2) 簽審申請內嵌報單是海關的發展方向；(3) 以最新版本為起點，未來升版成本更低。
+  </div>
+</div>
+
+<!-- 4. 新系統架構 -->
+<div class="section">
+  <h2>四、新系統架構設計</h2>
+
+  <h3>4.1 三層分離架構</h3>
+  <p>新系統最核心的設計原則是<strong>把資料、傳輸格式、計算邏輯三者分離</strong>：</p>
+  <table>
+    <thead><tr><th>層級</th><th>負責什麼</th><th>舉例</th></tr></thead>
+    <tbody>
+      <tr><td><strong>資料層</strong></td><td>存人看得懂的業務資料</td><td>運輸方式存「空運」、特殊關係存「是/否」</td></tr>
+      <tr><td><strong>格式轉換層</strong></td><td>把資料翻譯成海關要的格式</td><td>「空運」→ 代碼 <code>1</code>、「是」→ 代碼 <code>137</code></td></tr>
+      <tr><td><strong>商業邏輯層</strong></td><td>執行計算規則</td><td>奢侈稅判斷、推貿費計算</td></tr>
+    </tbody>
+  </table>
+  <div class="highlight highlight-info">
+    <strong>為什麼要分離？</strong>
+    舉例：如果海關把空運的代碼從 <code>1</code> 改成 <code>10</code>，在舊系統中需要改 Delphi 程式碼、重新編譯、部署。在新系統中，只需要改格式轉換層的一行對照表，不用動資料庫、不用跑 migration。
+  </div>
+
+  <h3>4.2 兩種傳輸格式，一套資料</h3>
+  <p>五崧有「區外」和「區內」兩種報單，傳輸格式不同。在舊系統中，區外和區內各有獨立的程式碼，兩邊的邏輯不完全同步，維護成本高。</p>
+  <p>新系統的做法是：<strong>資料只存一套</strong>，用兩個不同的格式轉換器輸出：</p>
+
+  <div class="flow-split">
+    <div class="flow-source">同一份<br>報關資料</div>
+    <div class="flow-arrows">
+      <div class="flow-arrow-line">&rarr;</div>
+      <div class="flow-arrow-line">&rarr;</div>
+    </div>
+    <div class="flow-targets">
+      <div class="flow-target xml">XML 格式轉換 → 區外報單</div>
+      <div class="flow-target txt">TXT 格式轉換 → 區內報單</div>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th></th><th>區外</th><th>區內</th></tr></thead>
+    <tbody>
+      <tr><td>適用對象</td><td>一般貿易</td><td>科學園區/加工出口區/自貿港區</td></tr>
+      <tr><td>傳輸格式</td><td>XML</td><td>TXT 固定寬度</td></tr>
+      <tr><td>官方規格</td><td>XSD R-08-01</td><td>海運/空運 EDI MIG</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 新系統資料表結構</h3>
+  <table>
+    <thead><tr><th>資料表</th><th>用途</th><th class="num">欄位數</th><th>對應舊系統</th></tr></thead>
+    <tbody>
+      <tr><td><strong>CustomsDeclaration</strong></td><td>報單主檔（含副檔合併）</td><td class="num">~160</td><td>SCUSDEC + CUSSM 合併</td></tr>
+      <tr><td><strong>DeclarationItem</strong></td><td>報單項次明細</td><td class="num">~125</td><td>SCUSITEM + 特殊品項區塊</td></tr>
+      <tr><td><strong>DeclarationApplication</strong></td><td>簽審申請 <span class="badge badge-info">全新</span></td><td class="num">~38</td><td>取代 CUSSM 簽證欄位</td></tr>
+      <tr><td><strong>ApplicationDocument</strong></td><td>簽審檢附文件 <span class="badge badge-info">全新</span></td><td class="num">~9</td><td>取代 visa_doc_type1~5</td></tr>
+      <tr><td><strong>DeclarationReview</strong></td><td>客戶預審確認 <span class="badge badge-info">全新</span></td><td class="num">~8</td><td>新功能：客戶線上確認報單</td></tr>
+      <tr><td><strong>DeclarationTaxFee</strong></td><td>報單稅費明細</td><td class="num">~5</td><td>SCUSTAX</td></tr>
+      <tr><td><strong>ItemTaxFee</strong></td><td>項次稅費明細</td><td class="num">~7</td><td>SCUSITX</td></tr>
+      <tr><td><strong>DeclarationContainer</strong></td><td>貨櫃資訊</td><td class="num">~8</td><td>SCUSCNT</td></tr>
+      <tr><td><strong>DeclarationInvoice</strong></td><td>發票明細</td><td class="num">~6</td><td>SCUSINV</td></tr>
+      <tr><td><strong>DeclarationVolume</strong></td><td>材積明細</td><td class="num">~13</td><td>SCUSVOL</td></tr>
+      <tr><td><strong>VehicleIdentification</strong></td><td>車身號碼</td><td class="num">~3</td><td>SCUSCAT</td></tr>
+      <tr style="font-weight:700"><td>合計</td><td>11 張表</td><td class="num">~390</td><td>舊 11 張 670 欄</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 5. 新舊系統比較 -->
+<div class="section">
+  <h2>五、新舊系統比較</h2>
+
+  <h3>5.1 簽審申請：最大的結構性改變</h3>
+  <p>這是新舊系統差異最大的地方。以高科技產品出口簽審為例：</p>
+  <div class="compare-grid">
+    <div class="compare-card old">
+      <h4>舊系統</h4>
+      <ul>
+        <li>一次只能填寫<strong>一種簽證</strong>，需分次傳送</li>
+        <li>30 個欄位散落在報單副檔，命名不直覺</li>
+        <li>最多只能附 <strong>5 份文件</strong>（寫死 5 組欄位）</li>
+        <li>不支援影像/電子檔上傳</li>
+        <li>簽證類別映射寫死在程式碼中</li>
+      </ul>
+    </div>
+    <div class="compare-card new">
+      <h4>新系統</h4>
+      <ul>
+        <li>一張報單可以<strong>同時多種簽審</strong>（不限數量）</li>
+        <li>結構化的獨立資料表，每筆簽審有完整的申請人/代理人/文件</li>
+        <li>文件數量<strong>不限</strong></li>
+        <li><strong>支援</strong>影像/PDF 上傳</li>
+        <li>申請業務別直接填代碼，不用映射</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>5.1.1 實際範例：台灣光罩出口高科技光罩到中國</h3>
+  <p>以下用 LRP 資料庫中的真實報單（B0501-01896），展示新舊系統<strong>傳送給海關的 XML</strong> 差異：</p>
+  <div style="background:var(--gray-100); border-radius:8px; padding:16px; margin-bottom:16px; font-size:13px; color:var(--gray-500);">
+    客戶：台灣光罩股份有限公司（22099408）｜報單：B0501-01896（空運出口 B9）｜貨品：PHOTOMASK EB6X-NIK 6"｜目的地：中國｜最終使用者：SHANGHAI HUA HONG GRACE SEMI.｜用途：Wafer Fabrication
+  </div>
+
+  <h4 style="font-size:15px; color:var(--danger); margin:20px 0 12px;">舊系統：報單和簽審分成兩個 XML 檔案傳送</h4>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+    <div style="background:#1e293b; color:#e2e8f0; border-radius:8px; padding:16px; font-size:12px; font-family:'SF Mono','Fira Code',monospace; line-height:1.7; overflow-x:auto;">
+      <div style="color:#94a3b8; margin-bottom:8px;">📄 檔案 1：報單 XML（NX5105）→ 海關</div>
+      <span style="color:#7dd3fc;">&lt;Declaration</span> xmlns=<span style="color:#fde68a;">"...NX5105..."</span><span style="color:#7dd3fc;">&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;ID&gt;</span>CSCA05014<span style="color:#7dd3fc;">&lt;/ID&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;TypeCode&gt;</span>B9<span style="color:#7dd3fc;">&lt;/TypeCode&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;Exporter&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;Name&gt;</span>台灣光罩...<span style="color:#7dd3fc;">&lt;/Name&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/Exporter&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;GovernmentAgencyGoodsItem&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;Description&gt;</span>PHOTOMASK...<span style="color:#7dd3fc;">&lt;/Description&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/GovernmentAgencyGoodsItem&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#64748b;">⚠️ 報單裡面沒有簽審資料</span><br>
+      <span style="color:#7dd3fc;">&lt;/Declaration&gt;</span>
+    </div>
+    <div style="background:#1e293b; color:#e2e8f0; border-radius:8px; padding:16px; font-size:12px; font-family:'SF Mono','Fira Code',monospace; line-height:1.7; overflow-x:auto;">
+      <div style="color:#94a3b8; margin-bottom:8px;">📄 檔案 2：簽審 XML（NX201）→ 國貿局</div>
+      <span style="color:#7dd3fc;">&lt;Declaration</span> xmlns=<span style="color:#fde68a;">"...NX201_07..."</span><span style="color:#7dd3fc;">&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;tw_Application&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;tw_TypeCode&gt;</span>SHTC<span style="color:#7dd3fc;">&lt;/tw_TypeCode&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;tw_Declarer&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;台灣光罩...<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/tw_Declarer&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;AdditionalDocument&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;TypeCode&gt;</span>2<span style="color:#7dd3fc;">&lt;/TypeCode&gt;</span> 交易文件<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/AdditionalDocument&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;AdditionalDocument&gt;</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;TypeCode&gt;</span>3<span style="color:#7dd3fc;">&lt;/TypeCode&gt;</span> 保證書<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/AdditionalDocument&gt;</span><br>
+      &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;/tw_Application&gt;</span><br>
+      <span style="color:#7dd3fc;">&lt;/Declaration&gt;</span>
+    </div>
+  </div>
+  <div style="text-align:center; font-size:13px; color:var(--danger); margin-bottom:24px;">
+    ⚠️ 兩個檔案分開傳送。報單副檔只有一組簽審欄位，一張報單一次只能填寫一種簽審（例如高科技出口管制）。同一種簽審內最多附 5 份文件。如果需要申請第二種（例如商品檢驗），OP 需要另外再傳送一次。
+  </div>
+
+  <h4 style="font-size:15px; color:var(--success); margin:20px 0 12px;">新系統（R-08-01）：報單內嵌簽審，一個 XML 搞定</h4>
+  <div style="background:#1e293b; color:#e2e8f0; border-radius:8px; padding:16px; font-size:12px; font-family:'SF Mono','Fira Code',monospace; line-height:1.7; overflow-x:auto; margin-bottom:16px;">
+    <div style="color:#94a3b8; margin-bottom:8px;">📄 單一檔案：報單 + 所有簽審 → 關港貿自動分發</div>
+    <span style="color:#7dd3fc;">&lt;Declaration</span> xmlns=<span style="color:#fde68a;">"...NX5105:R-08-01..."</span><span style="color:#7dd3fc;">&gt;</span><br>
+    &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;ID&gt;</span>CSCA05014<span style="color:#7dd3fc;">&lt;/ID&gt;</span><br>
+    &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;TypeCode&gt;</span>B9<span style="color:#7dd3fc;">&lt;/TypeCode&gt;</span><br>
+    &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;Exporter&gt;</span>台灣光罩...<span style="color:#7dd3fc;">&lt;/Exporter&gt;</span><br>
+    &nbsp;&nbsp;<span style="color:#7dd3fc;">&lt;GovernmentAgencyGoodsItem&gt;</span>...<span style="color:#7dd3fc;">&lt;/GovernmentAgencyGoodsItem&gt;</span><br>
+    <br>
+    &nbsp;&nbsp;<span style="color:#86efac;">&#9650; 以上跟舊系統一樣</span><br>
+    &nbsp;&nbsp;<span style="color:#fbbf24;">&#9660; 以下是嵌入的簽審申請（舊系統沒有這段）</span><br>
+    <br>
+    &nbsp;&nbsp;<span style="color:#fbbf24;">&lt;tw_Application&gt;</span> <span style="color:#94a3b8;">── 第 1 筆：高科技出口管制 ──</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;tw_TypeCode&gt;</span>SHTC<span style="color:#fbbf24;">&lt;/tw_TypeCode&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;tw_Declarer&gt;</span>台灣光罩...<span style="color:#fbbf24;">&lt;/tw_Declarer&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;AdditionalDocument&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;TypeCode&gt;</span>2<span style="color:#fbbf24;">&lt;/TypeCode&gt;</span> <span style="color:#94a3b8;">交易文件</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;/AdditionalDocument&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;AdditionalDocument&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;TypeCode&gt;</span>3<span style="color:#fbbf24;">&lt;/TypeCode&gt;</span> <span style="color:#94a3b8;">保證書</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#fbbf24;">&lt;/AdditionalDocument&gt;</span><br>
+    &nbsp;&nbsp;<span style="color:#fbbf24;">&lt;/tw_Application&gt;</span><br>
+    <br>
+    &nbsp;&nbsp;<span style="color:#c084fc;">&lt;tw_Application&gt;</span> <span style="color:#94a3b8;">── 第 2 筆：商品檢驗（舊系統需另外傳送）──</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">&lt;tw_TypeCode&gt;</span>IP<span style="color:#c084fc;">&lt;/tw_TypeCode&gt;</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c084fc;">&lt;AdditionalDocument&gt;...&lt;/AdditionalDocument&gt;</span> <span style="color:#94a3b8;">×6 份，不限數量</span><br>
+    &nbsp;&nbsp;<span style="color:#c084fc;">&lt;/tw_Application&gt;</span><br>
+    <br>
+    <span style="color:#7dd3fc;">&lt;/Declaration&gt;</span>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+    <div style="background:var(--danger-light); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:24px; margin-bottom:4px;">📄📄</div>
+      <div style="font-size:13px; font-weight:600; color:var(--danger);">舊系統</div>
+      <div style="font-size:12px; color:var(--gray-500);">多個檔案分開傳<br>一次一種簽審<br>文件最多 5 份</div>
+    </div>
+    <div style="font-size:24px; display:flex; align-items:center; justify-content:center; color:var(--gray-300);">→</div>
+    <div style="background:var(--success-light); border-radius:8px; padding:16px; text-align:center;">
+      <div style="font-size:24px; margin-bottom:4px;">📄</div>
+      <div style="font-size:13px; font-weight:600; color:var(--success);">新系統</div>
+      <div style="font-size:12px; color:var(--gray-500);">一個檔案全包<br>多種簽審同時送<br>文件不限數量</div>
+    </div>
+  </div>
+
+  <div class="highlight highlight-info">
+    <strong>對 OP 的影響：無</strong>
+    填寫的資料內容完全一樣（目的地、使用者、用途、文件等），差別只在傳輸的 XML 結構。OP 不需要學新東西，只是系統限制被解除了。
+  </div>
+
+  <h3>5.2 表單設計</h3>
+  <div class="compare-grid">
+    <div class="compare-card old">
+      <h4>舊系統</h4>
+      <ul>
+        <li>Delphi Form 畫面寫死，改欄位要改程式碼</li>
+        <li>品名拆成 13 個欄位再組合</li>
+        <li>許可證固定 5 組、指定代號固定 10 組</li>
+        <li>車輛/食品/醫材欄位都在同一張表</li>
+      </ul>
+    </div>
+    <div class="compare-card new">
+      <h4>新系統</h4>
+      <ul>
+        <li>表單依<strong>報單類別+進出口+空海運</strong>動態顯示需要的欄位區塊</li>
+        <li>品名一個文字欄位，不限長度</li>
+        <li>許可證、指定代號用陣列存，不限數量</li>
+        <li>特殊品項（車輛/食品/醫材）只在相關稅則時才出現</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>5.3 隱藏邏輯處理</h3>
+  <div class="compare-grid">
+    <div class="compare-card old">
+      <h4>舊系統</h4>
+      <ul>
+        <li>15 項邏輯全部寫在 Delphi 程式碼中</li>
+        <li>缺乏獨立的規格文件</li>
+        <li>修改一個規則可能影響其他規則</li>
+      </ul>
+    </div>
+    <div class="compare-card new">
+      <h4>新系統</h4>
+      <ul>
+        <li><strong>8 項</strong>轉為明確的資料欄位（例如：外國客戶從「猜」變成「直接標記」）</li>
+        <li><strong>3 項</strong>歸入格式轉換層（例如：提單類型碼 — 系統自動加）</li>
+        <li><strong>3 項</strong>歸入獨立的計算模組（例如：奢侈稅 — 獨立模組，有文件有測試）</li>
+        <li>每項邏輯都有文件和自動化測試</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>5.4 新增功能</h3>
+  <p>以下是新系統規劃新增、舊系統沒有的功能：</p>
+  <table>
+    <thead><tr><th>功能</th><th>舊系統</th><th>新系統</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>客戶預審確認</strong></td>
+        <td>無此功能</td>
+        <td>系統產生 Web 連結發送給客戶，客戶可線上檢視完整報單內容並確認或退回修改意見，系統自動記錄</td>
+      </tr>
+      <tr>
+        <td><strong>加班判斷</strong></td>
+        <td>OP 手動標記加班旗標</td>
+        <td>系統依打單時間自動建議是否加班（門檻依客戶合約設定，例如 6 點或 8 點），OP 可手動調整</td>
+      </tr>
+      <tr>
+        <td><strong>結案狀態追蹤</strong></td>
+        <td>OP 上網查海關結案狀態（MT/MS），手動通知客戶</td>
+        <td>預留結案狀態欄位，未來可串接關貿自動更新並通知客戶</td>
+      </tr>
+      <tr>
+        <td><strong>跨報單比價提醒</strong></td>
+        <td>邏輯檢查寫在程式碼內</td>
+        <td>同客戶歷史報單單價異常比對，獨立的邏輯檢查模組，OP 可查看提醒並選擇修改或強制通過</td>
+      </tr>
+      <tr>
+        <td><strong>商標自動帶入</strong></td>
+        <td>OP 手動從商標資料庫貼圖到報單</td>
+        <td>建單時自動從客戶商標主檔帶入，C2/C3 查驗時一鍵附上商標圖片</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>5.5 整體比較</h3>
+  <table>
+    <thead><tr><th>面向</th><th>舊系統</th><th>新系統</th></tr></thead>
+    <tbody>
+      <tr><td>資料表數量</td><td>11 張（分散/重複）</td><td>11 張（精簡/結構化）</td></tr>
+      <tr><td>總欄位數</td><td>670 個</td><td>390 個（<strong>-42%</strong>）</td></tr>
+      <tr><td>海關規格版本</td><td>R-05-00（2017）</td><td><strong>R-08-01（2024）</strong></td></tr>
+      <tr><td>區外/區內</td><td>各一套程式碼</td><td>一份資料 + 兩個格式轉換器</td></tr>
+      <tr><td>簽審架構</td><td>1:1 散落欄位</td><td><strong>1:N 結構化</strong>，支援多簽審</td></tr>
+      <tr><td>隱藏邏輯</td><td>15 項藏在程式碼</td><td>全部歸類透明化</td></tr>
+      <tr><td>代碼表維護</td><td>寫死在程式碼</td><td>可維護的參考資料表</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 6. Future Proof -->
+<div class="section">
+  <h2>六、未來擴充性（Future Proof）</h2>
+
+  <h3>6.1 海關規格更新</h3>
+  <p>近年海關對進口報單規格做了以下修正（依時間排序）：</p>
+  <ul style="padding-left:20px; margin-bottom:12px; color: var(--gray-700);">
+    <li><strong>2021-08</strong>：產地證明書新增 5 個欄位</li>
+    <li><strong>2023-05</strong>：新增車輛燃料代碼 GM（油電混合車）</li>
+    <li><strong>2025-05</strong>：成分名稱欄位長度從 100 字元擴大到 500 字元</li>
+  </ul>
+  <p>這類修正在舊系統需要改程式碼。在新系統中：</p>
+  <table>
+    <thead><tr><th>修正類型</th><th>舊系統要怎麼改</th><th>新系統要怎麼改</th></tr></thead>
+    <tbody>
+      <tr><td>新增代碼值（例如 GM 油電混合）</td><td>如涉及值映射或傳輸邏輯，需改 Delphi 程式碼 → 編譯 → 部署</td><td><strong>在代碼表新增一筆</strong>，不用改程式</td></tr>
+      <tr><td>欄位長度變更（100→500）</td><td>改程式碼 + 改 Oracle 欄位</td><td><strong>跑一個 migration 指令</strong>，自動變更資料庫</td></tr>
+      <tr><td>新增選填欄位</td><td>改 Delphi + 改 Oracle + 改畫面</td><td>加一行資料定義 → 資料庫自動同步 → API 自動可用 → <strong>前端表單仍需配合修改</strong></td></tr>
+      <tr><td>海關改傳輸代碼</td><td>找到程式碼中所有相關位置逐一修改</td><td>改格式轉換層的一行對照表</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.2 預留的擴充空間</h3>
+  <p>新系統已在設計中預留了以下擴充空間，五崧目前不需要，但未來如果業務擴展可以隨時啟用：</p>
+  <table>
+    <thead><tr><th>預留區塊</th><th>啟用條件</th><th>啟用成本</th></tr></thead>
+    <tbody>
+      <tr><td>食品安全申報</td><td>五崧開始承接食品進口報關</td><td>資料表已有欄位，只需在前端表單開啟對應區塊</td></tr>
+      <tr><td>動植物檢疫</td><td>五崧承接動植物相關報關</td><td>同上</td></tr>
+      <tr><td>型式認可證</td><td>客戶進口需型式認可的品項</td><td>同上</td></tr>
+      <tr><td>酒類管理</td><td>五崧承接酒類報關</td><td>目前不建檔，需要時加資料欄位並擴充表單</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 維護便利性</h3>
+  <div class="highlight highlight-success">
+    <strong>新系統的維護優勢</strong>
+    <ul style="padding-left:20px; margin-top:8px;">
+      <li><strong>箱號 → 關別對照</strong>：從舊系統寫死的 if-else 改為可維護的參考資料表。新增關別不用改程式。</li>
+      <li><strong>表單欄位顯示</strong>：依報單類別、進出口別、空海運別等條件，集中管理哪些欄位區塊要顯示。比起舊系統散落各處的條件判斷，改動時只需調整前端的條件設定元件，不影響後端。</li>
+      <li><strong>代碼表管理</strong>：報單類別、稅費代碼、幣別、國家代碼、運輸方式等，海關隨時可能更新。新系統有獨立的代碼表管理，不再寫死。</li>
+      <li><strong>傳輸方式透明化</strong>：目前舊系統寫檔案到特定目錄讓 TradeVan 軟體撈取。新系統同樣支援，但傳輸設定可調整，不寫死在程式碼中。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 7. 建議事項 -->
+<div class="section">
+  <h2>七、建議事項與注意事項</h2>
+
+  <h3>7.1 建議採取的行動</h3>
+  <table>
+    <thead><tr><th>#</th><th>建議</th><th>說明</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>新系統直接採用 R-08-01</strong></td><td>以最新版本為起點，未來海關再升版時，新系統的分層架構可以更快速地跟進調整。</td></tr>
+      <tr><td>2</td><td><strong>繼續使用關貿網路（TradeVan）傳輸</strong></td><td>現有傳輸管道穩定，新系統產生檔案後仍透過 TradeVan 送出，不需要改變傳輸方式。</td></tr>
+      <tr><td>3</td><td><strong>新舊系統可以並行過渡</strong></td><td>新系統上線初期，舊系統可保留作為備援。兩套系統可同時運作，逐步移轉。</td></tr>
+      <tr><td>4</td><td><strong>代碼表需定期更新</strong></td><td>海關的作業代碼持續更新（最近一次：2026 年 3 月 23 日）。新系統需安排定期從關務署下載更新。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>7.2 需要五崧確認的事項</h3>
+  <table>
+    <thead><tr><th>#</th><th>待確認項目</th><th>影響範圍</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>區外報單的簽審申請目前怎麼處理？</strong>現行系統（Delphi）的區外簽證傳送功能已開發但未開放使用。區外的簽審是透過關港貿 portal 線上操作、其他系統、或 OP 手動處理？</td><td>影響新系統是否需要統一區內/區外的簽審傳輸</td></tr>
+      <tr><td>2</td><td>醫療器材許可證目前是否有在報單上填報？</td><td>影響醫療器材區塊是否為第一期範圍</td></tr>
+      <tr><td>3</td><td>是否有客戶開始要求 AEO 編號？</td><td>影響 AEO 欄位的必填/選填設定</td></tr>
+      <tr><td>4</td><td>五崧的多段航程（轉機）報單比例有多少？</td><td>影響是否需要支援多段航程欄位</td></tr>
+      <tr><td>5</td><td>商標圖片目前存放在哪裡？（本機目錄/file server/其他）</td><td>影響新系統的檔案儲存架構</td></tr>
+      <tr><td>6</td><td>C2/C3 查驗時貼商標圖片，是貼到紙本還是電子檔？</td><td>影響商標附件的流程設計</td></tr>
+      <tr><td>7</td><td>各部門使用的報單欄位有哪些？（詳見附件「欄位歸屬確認表」）</td><td>影響哪些欄位放報關模組、哪些歸運輸或帳務</td></tr>
+    </tbody>
+  </table>
+
+  <h3>7.3 風險與注意事項</h3>
+  <div class="highlight highlight-warning">
+    <strong>區內傳輸格式無官方 XSD</strong>
+    區外傳輸有海關提供的正式 XSD 規格。區內傳輸使用的 TXT 固定寬度格式沒有 XSD，目前的欄位定義是從 Delphi 原始碼逆向工程取得的。建議向 IT 確認區內傳輸格式是否有更新版本的規格文件。
+  </div>
+  <div class="highlight highlight-warning">
+    <strong>資料遷移需要規劃</strong>
+    舊系統到新系統的資料遷移涉及欄位名稱變更、結構調整（副檔合併、簽證拆表）、日期格式轉換（VARCHAR → DATE）等。需要專門的遷移計畫和驗證流程。
+  </div>
+</div>
+
+<!-- 附錄 -->
+<div class="section">
+  <h2>附錄：分析資料來源</h2>
+  <table>
+    <thead><tr><th>資料來源</th><th>內容</th><th>提供者</th></tr></thead>
+    <tbody>
+      <tr><td>EDI_CPT.pas / EDI_CPT_Data.pas</td><td>Delphi 7 報關 EDI 傳輸原始碼（5,400 行）</td><td>IT</td></tr>
+      <tr><td>SCUSDEC 等 9 份 .doc</td><td>報關資料表欄位規格書</td><td>IT</td></tr>
+      <tr><td>NX5105...xml</td><td>區外傳輸實際範例（2026-03-04）</td><td>IT</td></tr>
+      <tr><td>NS0910...txt</td><td>區內傳輸實際範例（2026-03-04）</td><td>IT</td></tr>
+      <tr><td>XSD R-08-01（62 個 .xsd 檔）</td><td>海關官方最新 XML Schema</td><td>關港貿單一窗口</td></tr>
+      <tr><td>海運 EDI MIG（43 份 PDF）</td><td>海運 EDI 訊息建置指引</td><td>財政部關務署</td></tr>
+      <tr><td>空運 EDI MIG（25 份 PDF）</td><td>空運 EDI 訊息建置指引</td><td>財政部關務署</td></tr>
+      <tr><td>資料庫全量還原（351 張表）</td><td>舊系統資料庫還原分析</td><td>八拍子還原</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  <p>本報告由八拍子有限公司製作 &mdash; 2026 年 3 月</p>
+</div>
+
+</div>
+</body>
+</html>
